@@ -38,3 +38,19 @@ def is_trading_day(d: date) -> bool:
 def ny_today() -> date:
     """Current date in America/New_York."""
     return datetime.now(NY).date()
+
+
+def latest_poll(jsonl_path) -> dict:
+    """Return the last non-blank JSONL record from the poller feed."""
+    p = Path(jsonl_path)
+    if not p.exists():
+        raise FileNotFoundError(f"No poll feed at {p}")
+    last = None
+    with p.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                last = line
+    if last is None:
+        raise ValueError(f"Poll feed empty: {p}")
+    return json.loads(last)
