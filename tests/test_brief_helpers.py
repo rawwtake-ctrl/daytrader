@@ -67,3 +67,20 @@ def test_format_hard_numbers_handles_null_price():
     record = {"ts_ny": "t", "quotes": {"ES=F": {"price": None}}}
     out = bh.format_hard_numbers(record)
     assert "| ES (S&P fut) | n/a |" in out
+
+
+def test_tier1_from_poll_extracts_levels():
+    record = {"quotes": {"ES=F": {"prev_close": 7462.0, "high": 7510.0, "low": 7455.0}}}
+    levels = bh.tier1_from_poll(record, "ES=F")
+    assert levels["symbol"] == "ES=F"
+    assert levels["pdc"] == 7462.0
+    assert levels["day_high"] == 7510.0
+    assert levels["day_low"] == 7455.0
+    assert levels["overnight_high"] is None  # not available from one snapshot
+    assert "manually" in levels["note"]
+
+
+def test_tier1_from_poll_missing_symbol_returns_nones():
+    levels = bh.tier1_from_poll({"quotes": {}}, "ES=F")
+    assert levels["pdc"] is None
+    assert levels["day_high"] is None

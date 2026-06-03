@@ -86,3 +86,24 @@ def format_hard_numbers(record: dict) -> str:
         state = q.get("market_state", "n/a")
         lines.append(f"| {label} | {q['price']} | {chg_s} | {prev_s} | {state} |")
     return "\n".join(lines)
+
+
+def tier1_from_poll(record: dict, symbol: str = "ES=F") -> dict:
+    """Reference levels for a symbol from one poll snapshot.
+
+    A single Yahoo quote exposes previous close + day high/low only. PDC is
+    exact; day H/L approximate the most recent session range. True overnight
+    H/L needs a time series, so it is None here and the routine flags it for
+    manual marking.
+    """
+    q = record.get("quotes", {}).get(symbol, {})
+    return {
+        "symbol": symbol,
+        "pdc": q.get("prev_close"),
+        "day_high": q.get("high"),
+        "day_low": q.get("low"),
+        "overnight_high": None,
+        "overnight_low": None,
+        "note": ("PDC exact; day H/L = latest session range; overnight H/L "
+                 "unavailable from single snapshot — mark manually on terminal."),
+    }
