@@ -15,7 +15,7 @@ ACCURACY:
     most US equities (with caveats). Free, no API key.
 
 OUTPUT:
-    JSONL appended to C:\\Claude\\DayTrader\\paper-trading\\live-feed.jsonl
+    JSONL appended to paper-trading/live-feed.jsonl (see OUT_PATH below)
 """
 
 from __future__ import annotations
@@ -35,18 +35,57 @@ OUT_PATH = Path(r"/Users/hitanshsharma/Claude/DayTrader/paper-trading/live-feed.
 OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
-def fetch_quotes(symbols: list[str]) -> dict:
-    """Hit Yahoo public quote endpoint. Returns dict keyed by symbol."""
-    qs = ",".join(symbols)
-    url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={qs}"
+def _fetch_one(symbol: str) -> dict | None:
+    """Fetch a single symbol from Yahoo's v8 chart endpoint (no auth crumb needed).
+
+    The legacy v7 /finance/quote endpoint now returns HTTP 401 without a crumb.
+    v8 /finance/chart is still openly accessible. We map its `meta` block back
+    into the v7-style field names the rest of the script expects, so downstream
+    code (poll_once, format_quote) is unchanged.
+    """
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
     req = Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         "Accept": "application/json",
     })
     with urlopen(req, timeout=10) as resp:
         data = json.load(resp)
-    quotes = data.get("quoteResponse", {}).get("result", [])
-    return {q["symbol"]: q for q in quotes}
+    results = (data.get("chart") or {}).get("result") or []
+    if not results:
+        return None
+    meta = results[0].get("meta", {})
+    price = meta.get("regularMarketPrice")
+    prev = meta.get("previousClose", meta.get("chartPreviousClose"))
+    chg_pct = None
+    if isinstance(price, (int, float)) and isinstance(prev, (int, float)) and prev:
+        chg_pct = (price - prev) / prev * 100.0
+    return {
+        "symbol": meta.get("symbol", symbol),
+        "regularMarketPrice": price,
+        "regularMarketChangePercent": chg_pct,
+        "regularMarketDayHigh": meta.get("regularMarketDayHigh"),
+        "regularMarketDayLow": meta.get("regularMarketDayLow"),
+        "regularMarketVolume": meta.get("regularMarketVolume"),
+        "regularMarketPreviousClose": prev,
+        "marketState": meta.get("marketState"),
+    }
+
+
+def fetch_quotes(symbols: list[str]) -> dict:
+    """Fetch each symbol via the v8 chart endpoint. Returns dict keyed by symbol.
+
+    One request per symbol (v8 chart is per-symbol). A symbol that fails to
+    fetch is skipped, not fatal — the poll still records whatever succeeded.
+    """
+    out = {}
+    for sym in symbols:
+        try:
+            q = _fetch_one(sym)
+        except (URLError, TimeoutError, ValueError, KeyError):
+            q = None
+        if q is not None:
+            out[sym] = q
+    return out
 
 
 def format_quote(q: dict) -> str:
