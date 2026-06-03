@@ -1,0 +1,3 @@
+date,slot,setup,direction,entry,stop,target,exit,R,followed_rules,outcome,brief_called_it,notes
+2026-05-14,RTH,vwap-support-long,long,7485,7468,7521,7521,3.0,yes,win,yes,Setup B; pre-marked; rode to T2 into close
+2026-05-14,RTH,msft-rel-weakness-short,short,405,408,402,408,-1.0,yes,loss,yes,Setup D; stopped at 408; NO partial-scale rule = the lesson (would've been +0.5R with 50% at +1R)
