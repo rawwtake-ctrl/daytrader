@@ -58,7 +58,7 @@ def latest_poll(jsonl_path) -> dict:
 
 SYMBOL_LABELS = {
     "ES=F": "ES (S&P fut)", "NQ=F": "NQ (Nasdaq fut)", "YM=F": "YM (Dow fut)",
-    "RTY=F": "RTY (Russell fut)", "^VIX": "VIX", "^TNX": "10Y yield",
+    "RTY=F": "RTY (via IWM)", "^VIX": "VIX", "^TNX": "10Y yield",
     "CL=F": "WTI crude", "GC=F": "Gold", "DX-Y.NYB": "DXY",
     "MSFT": "MSFT", "NVDA": "NVDA", "AAPL": "AAPL", "GOOGL": "GOOGL", "META": "META",
 }
@@ -69,7 +69,7 @@ def format_hard_numbers(record: dict) -> str:
     ts = record.get("ts_ny", "unknown")
     quotes = record.get("quotes", {})
     lines = [
-        f"_Poller snapshot: {ts} ET (Yahoo; futures ~15-20 min delayed)_",
+        f"_Poller snapshot: {ts} ET (Stooq; ~15 min delayed)_",
         "",
         "| Symbol | Price | Chg% | Prev close | State |",
         "|---|---|---|---|---|",
@@ -83,7 +83,7 @@ def format_hard_numbers(record: dict) -> str:
         chg_s = f"{chg:+.2f}%" if isinstance(chg, (int, float)) else "n/a"
         prev = q.get("prev_close")
         prev_s = str(prev) if prev is not None else "n/a"
-        state = q.get("market_state", "n/a")
+        state = q.get("market_state") or "n/a"
         lines.append(f"| {label} | {q['price']} | {chg_s} | {prev_s} | {state} |")
     return "\n".join(lines)
 

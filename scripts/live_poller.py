@@ -1,5 +1,5 @@
 """
-Live Market Poller — Yahoo Finance via public quote API.
+Live Market Poller — Stooq keyless light-quote API.
 
 Polls a basket of symbols every N seconds and appends a JSONL line per poll
 to live_feed.jsonl. Also prints a tidy line to stdout per poll.
@@ -11,8 +11,9 @@ USAGE:
     python live_poller.py --once     # one-shot for cron / Claude polling
 
 ACCURACY:
-    Yahoo quotes are typically 15-20 min delayed for futures, real-time for
-    most US equities (with caveats). Free, no API key.
+    Stooq quotes are ~15 min delayed, free, no API key. Crucially, Stooq serves
+    datacenter IPs — Yahoo's v7/v8 endpoints block them, so the scheduled cloud
+    agent could never fetch from Yahoo. Symbol mapping lives in STOOQ_MAP below.
 
 OUTPUT:
     JSONL appended to paper-trading/live-feed.jsonl (see OUT_PATH below)
@@ -35,56 +36,68 @@ OUT_PATH = Path(r"/Users/hitanshsharma/Claude/DayTrader/paper-trading/live-feed.
 OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _fetch_one(symbol: str) -> dict | None:
-    """Fetch a single symbol from Yahoo's v8 chart endpoint (no auth crumb needed).
+# Map our canonical (Yahoo-style) symbols to Stooq tickers. Yahoo's v7/v8
+# endpoints block datacenter IPs — the scheduled cloud agent runs from one, so
+# every cloud poll came back empty. Stooq's light-quote endpoint is keyless and
+# serves datacenter requests. RTY/Dow use ETF/index tickers where Stooq lacks a
+# clean front-month future; all others are direct.
+STOOQ_MAP = {
+    "ES=F": "es.f", "NQ=F": "nq.f", "YM=F": "ym.f", "RTY=F": "iwm.us",
+    "MSFT": "msft.us", "NVDA": "nvda.us", "AAPL": "aapl.us",
+    "GOOGL": "googl.us", "META": "meta.us",
+    "^VIX": "vi.f", "^TNX": "10yusy.b", "CL=F": "cl.f", "GC=F": "gc.f",
+    "DX-Y.NYB": "dx.f",
+}
+_STOOQ_REV = {v.upper(): k for k, v in STOOQ_MAP.items()}
 
-    The legacy v7 /finance/quote endpoint now returns HTTP 401 without a crumb.
-    v8 /finance/chart is still openly accessible. We map its `meta` block back
-    into the v7-style field names the rest of the script expects, so downstream
-    code (poll_once, format_quote) is unchanged.
-    """
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-    req = Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Accept": "application/json",
-    })
-    with urlopen(req, timeout=10) as resp:
-        data = json.load(resp)
-    results = (data.get("chart") or {}).get("result") or []
-    if not results:
+
+def _to_float(s):
+    try:
+        return float(s)
+    except (TypeError, ValueError):
         return None
-    meta = results[0].get("meta", {})
-    price = meta.get("regularMarketPrice")
-    prev = meta.get("previousClose", meta.get("chartPreviousClose"))
-    chg_pct = None
-    if isinstance(price, (int, float)) and isinstance(prev, (int, float)) and prev:
-        chg_pct = (price - prev) / prev * 100.0
-    return {
-        "symbol": meta.get("symbol", symbol),
-        "regularMarketPrice": price,
-        "regularMarketChangePercent": chg_pct,
-        "regularMarketDayHigh": meta.get("regularMarketDayHigh"),
-        "regularMarketDayLow": meta.get("regularMarketDayLow"),
-        "regularMarketVolume": meta.get("regularMarketVolume"),
-        "regularMarketPreviousClose": prev,
-        "marketState": meta.get("marketState"),
-    }
 
 
 def fetch_quotes(symbols: list[str]) -> dict:
-    """Fetch each symbol via the v8 chart endpoint. Returns dict keyed by symbol.
+    """Fetch quotes from Stooq's keyless light-quote endpoint in one request.
 
-    One request per symbol (v8 chart is per-symbol). A symbol that fails to
-    fetch is skipped, not fatal — the poll still records whatever succeeded.
+    Field code `sd2t2ohlcvp` returns Symbol,Date,Time,Open,High,Low,Close,
+    Volume,Prev. We map results back into v7-style field names keyed by our
+    canonical symbols, so downstream code (poll_once, format_quote,
+    brief_helpers) is unchanged. Symbols Stooq can't resolve (date == "N/D")
+    are omitted and render n/a downstream.
     """
+    tickers = [STOOQ_MAP[s] for s in symbols if s in STOOQ_MAP]
+    if not tickers:
+        return {}
+    qs = "+".join(tickers)
+    url = f"https://stooq.com/q/l/?s={qs}&f=sd2t2ohlcvp&h&e=csv"
+    req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(req, timeout=15) as resp:
+        text = resp.read().decode("utf-8", "replace")
+
     out = {}
-    for sym in symbols:
-        try:
-            q = _fetch_one(sym)
-        except (URLError, TimeoutError, ValueError, KeyError):
-            q = None
-        if q is not None:
-            out[sym] = q
+    for line in text.strip().splitlines()[1:]:  # skip header row
+        parts = line.split(",")
+        if len(parts) < 9:
+            continue
+        sym, date, _time, _open, high, low, close, vol, prev = parts[:9]
+        canon = _STOOQ_REV.get(sym.upper())
+        if not canon or date == "N/D":
+            continue
+        price = _to_float(close)
+        prevc = _to_float(prev)
+        chg = (price - prevc) / prevc * 100.0 if (price is not None and prevc) else None
+        out[canon] = {
+            "symbol": sym,
+            "regularMarketPrice": price,
+            "regularMarketChangePercent": chg,
+            "regularMarketDayHigh": _to_float(high),
+            "regularMarketDayLow": _to_float(low),
+            "regularMarketVolume": _to_float(vol),
+            "regularMarketPreviousClose": prevc,
+            "marketState": None,
+        }
     return out
 
 
