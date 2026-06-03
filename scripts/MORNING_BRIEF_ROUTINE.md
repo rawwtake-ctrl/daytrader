@@ -14,12 +14,19 @@ the poller; every narrative claim carries a cited source URL.
    `python -c "import sys; sys.path.insert(0,'scripts'); import brief_helpers as b; print(b.is_trading_day(b.ny_today()))"`
    If it prints `False`, STOP. Do not write a brief. Exit cleanly.
 
-2. **Poll hard numbers.** Run: `python scripts/live_poller.py --once`
-   Then load the snapshot:
-   `python -c "import sys,json; sys.path.insert(0,'scripts'); import brief_helpers as b; r=b.latest_poll('paper-trading/live-feed.jsonl'); print(b.format_hard_numbers(r)); print('---LEVELS---'); print(b.tier1_from_poll(r,'ES=F'))"`
-   Capture the HARD NUMBERS table and the ES levels. If the poller failed (no
-   snapshot), write the brief with HARD NUMBERS = "unavailable — Yahoo fetch
-   failed" and continue. Do NOT substitute remembered or searched prices.
+2. **Poll hard numbers.** Run: `python3 scripts/live_poller.py --once`
+   **Expect this to FAIL with HTTP 403 when run from the scheduled cloud
+   environment** — free feeds (Stooq/Yahoo) block datacenter IPs. That is known
+   and fine. Two cases:
+   - **Poller SUCCEEDS** (e.g. run from a residential machine): load the snapshot
+     `python3 -c "import sys; sys.path.insert(0,'scripts'); import brief_helpers as b; r=b.latest_poll('paper-trading/live-feed.jsonl'); print(b.format_hard_numbers(r)); print('---LEVELS---'); print(b.tier1_from_poll(r,'ES=F'))"`
+     and paste the deterministic HARD NUMBERS table + ES levels verbatim.
+   - **Poller FAILS (the cloud case):** set HARD NUMBERS to
+     "live feed unavailable (cloud IP blocked) — figures below are web-sourced
+     and INDICATIVE; confirm on your own terminal." You MAY then list key levels
+     (ES/NQ, VIX, 10Y, WTI) ONLY where each carries a cited source URL from
+     WebSearch and is tagged `[web-sourced, indicative]`. NEVER present a
+     web-sourced number as exact, and NEVER invent one.
 
 3. **Research narrative (built-in WebSearch only — do NOT rely on firecrawl/MCP).**
    Search for, and cite a source URL for each:
