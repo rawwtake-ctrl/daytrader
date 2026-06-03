@@ -46,3 +46,24 @@ def test_latest_poll_missing_file_raises(tmp_path):
     import pytest
     with pytest.raises(FileNotFoundError):
         bh.latest_poll(tmp_path / "nope.jsonl")
+
+
+def test_format_hard_numbers_renders_table():
+    record = {
+        "ts_ny": "2026-06-03 06:00:01",
+        "quotes": {
+            "ES=F": {"price": 7500.0, "chg_pct": 0.5, "prev_close": 7462.0, "market_state": "PRE"},
+        },
+    }
+    out = bh.format_hard_numbers(record)
+    assert "2026-06-03 06:00:01" in out
+    assert "ES (S&P fut)" in out
+    assert "7500.0" in out
+    assert "+0.50%" in out
+    assert "| 10Y yield | n/a |" in out  # missing symbol renders n/a, not a crash
+
+
+def test_format_hard_numbers_handles_null_price():
+    record = {"ts_ny": "t", "quotes": {"ES=F": {"price": None}}}
+    out = bh.format_hard_numbers(record)
+    assert "| ES (S&P fut) | n/a |" in out

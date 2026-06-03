@@ -54,3 +54,35 @@ def latest_poll(jsonl_path) -> dict:
     if last is None:
         raise ValueError(f"Poll feed empty: {p}")
     return json.loads(last)
+
+
+SYMBOL_LABELS = {
+    "ES=F": "ES (S&P fut)", "NQ=F": "NQ (Nasdaq fut)", "YM=F": "YM (Dow fut)",
+    "RTY=F": "RTY (Russell fut)", "^VIX": "VIX", "^TNX": "10Y yield",
+    "CL=F": "WTI crude", "GC=F": "Gold", "DX-Y.NYB": "DXY",
+    "MSFT": "MSFT", "NVDA": "NVDA", "AAPL": "AAPL", "GOOGL": "GOOGL", "META": "META",
+}
+
+
+def format_hard_numbers(record: dict) -> str:
+    """Render the HARD NUMBERS markdown section deterministically (no LLM)."""
+    ts = record.get("ts_ny", "unknown")
+    quotes = record.get("quotes", {})
+    lines = [
+        f"_Poller snapshot: {ts} ET (Yahoo; futures ~15-20 min delayed)_",
+        "",
+        "| Symbol | Price | Chg% | Prev close | State |",
+        "|---|---|---|---|---|",
+    ]
+    for sym, label in SYMBOL_LABELS.items():
+        q = quotes.get(sym)
+        if not q or q.get("price") is None:
+            lines.append(f"| {label} | n/a | n/a | n/a | n/a |")
+            continue
+        chg = q.get("chg_pct")
+        chg_s = f"{chg:+.2f}%" if isinstance(chg, (int, float)) else "n/a"
+        prev = q.get("prev_close")
+        prev_s = str(prev) if prev is not None else "n/a"
+        state = q.get("market_state", "n/a")
+        lines.append(f"| {label} | {q['price']} | {chg_s} | {prev_s} | {state} |")
+    return "\n".join(lines)
