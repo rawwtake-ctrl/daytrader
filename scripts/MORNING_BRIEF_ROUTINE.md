@@ -21,12 +21,20 @@ the poller; every narrative claim carries a cited source URL.
    - **Poller SUCCEEDS** (e.g. run from a residential machine): load the snapshot
      `python3 -c "import sys; sys.path.insert(0,'scripts'); import brief_helpers as b; r=b.latest_poll('paper-trading/live-feed.jsonl'); print(b.format_hard_numbers(r)); print('---LEVELS---'); print(b.tier1_from_poll(r,'ES=F'))"`
      and paste the deterministic HARD NUMBERS table + ES levels verbatim.
-   - **Poller FAILS (the cloud case):** set HARD NUMBERS to
-     "live feed unavailable (cloud IP blocked) — figures below are web-sourced
-     and INDICATIVE; confirm on your own terminal." You MAY then list key levels
-     (ES/NQ, VIX, 10Y, WTI) ONLY where each carries a cited source URL from
-     WebSearch and is tagged `[web-sourced, indicative]`. NEVER present a
-     web-sourced number as exact, and NEVER invent one.
+   - **Poller FAILS (the cloud case):**
+     1. If a `TWELVEDATA_KEY` was provided to you, run
+        `TWELVEDATA_KEY=<key> python3 scripts/td_quotes.py`
+        for a DETERMINISTIC table of ETF index-proxies (SPY≈S&P, QQQ≈Nasdaq,
+        IWM≈Russell, DIA≈Dow), gold, and mega-caps from a keyed API that works
+        from the cloud. Paste that output verbatim as the HARD NUMBERS section
+        (it is honestly labelled as ETF proxies, not futures).
+     2. For what the free tier does NOT cover — exact ES/NQ futures levels, VIX,
+        10Y, WTI — source from WebSearch, each cited and tagged
+        `[web-sourced, indicative]`.
+     3. If no key / td_quotes also fails: set HARD NUMBERS to "live feed
+        unavailable (cloud IP blocked)" and use only cited
+        `[web-sourced, indicative]` figures.
+     NEVER present a web-sourced number as exact, and NEVER invent one.
 
 3. **Research narrative (built-in WebSearch only — do NOT rely on firecrawl/MCP).**
    Search for, and cite a source URL for each:
